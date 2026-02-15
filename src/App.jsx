@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
-import { Terminal, Activity, Users, Shield, Eye, DollarSign, Zap } from 'lucide-react'
+import { Terminal, Users, Zap, DollarSign, Eye, Hexagon } from 'lucide-react'
 
 // --- ECONOMICS CONFIGURATION ---
 const BASE_MINING_RATE = 0.1; 
@@ -37,38 +37,56 @@ function App() {
 
   // Sim State
   const [npuLoad, setNpuLoad] = useState(0);
-  const [latency, setLatency] = useState(0);
+  const [shards, setShards] = useState([]); // For Visual Rain
   const [logs, setLogs] = useState([]);
 
   const balanceRef = useRef(0);
   const godModeRef = useRef(0);
   const miningInterval = useRef(null);
   const hardwareInterval = useRef(null);
+  const shardInterval = useRef(null);
 
   const currentTier = [...TIERS].reverse().find(t => balance >= t.threshold) || TIERS[0];
-  const nextTier = TIERS[TIERS.indexOf(currentTier) + 1];
   const effectiveMultiplier = (currentTier.id === 7.3 && isOverheated) ? 5.0 : currentTier.multiplier;
 
+  // 1. INIT
   useEffect(() => {
     const init = async () => {
       let currentUser = null;
+      let startParam = null;
+
       if (window.Telegram?.WebApp) {
         const tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
         tg.setHeaderColor('#000000');
         if (tg.initDataUnsafe?.user) currentUser = tg.initDataUnsafe.user;
+        if (tg.initDataUnsafe?.start_param) startParam = tg.initDataUnsafe.start_param;
       }
+
       if (!currentUser) currentUser = { id: 999999999, first_name: 'Origin', username: 'founder' };
       setUser(currentUser);
 
       if (currentUser) {
+        // Fetch User
         const { data } = await supabase.from('users').select('*').eq('id', currentUser.id).single();
+        
         if (data) {
           setBalance(data.balance);
           balanceRef.current = data.balance;
         } else {
-          await supabase.from('users').insert({ id: currentUser.id, first_name: currentUser.first_name, balance: 100 });
+          // Create New User & Handle Referral
+          let referrerId = null;
+          if (startParam && startParam.startsWith('ref_')) {
+             referrerId = parseInt(startParam.split('_')[1]);
+          }
+          
+          await supabase.from('users').insert({ 
+            id: currentUser.id, 
+            first_name: currentUser.first_name, 
+            balance: 100,
+            referred_by: referrerId
+          });
           setBalance(100);
           balanceRef.current = 100;
         }
@@ -77,6 +95,7 @@ function App() {
     init();
   }, []);
 
+  // 2. AUTO-SAVE
   useEffect(() => {
     const saver = setInterval(async () => {
       if (user && balanceRef.current > 0) {
@@ -86,19 +105,24 @@ function App() {
     return () => clearInterval(saver);
   }, [user]);
 
+  // 3. MINING ENGINE
   const toggleMining = () => {
     if (status === 'MINING') {
       setStatus('IDLE');
       clearInterval(miningInterval.current);
       clearInterval(hardwareInterval.current);
+      clearInterval(shardInterval.current);
+      setShards([]);
       setLogs([]);
     } else {
       setStatus('MINING');
+      
+      // Hardware Loop
       hardwareInterval.current = setInterval(() => {
         setNpuLoad(Math.floor(Math.random() * (99 - 80 + 1) + 80));
-        setLatency(Math.floor(Math.random() * 40 + 10));
       }, 2000);
 
+      // Mining Loop
       miningInterval.current = setInterval(() => {
         const loadFactor = (Math.random() * 0.2) + 0.8; 
         
@@ -118,6 +142,16 @@ function App() {
         balanceRef.current = newBal;
       }, 100); 
 
+      // Visual Rain Loop (Shards)
+      shardInterval.current = setInterval(() => {
+        const id = Math.random();
+        const left = Math.random() * 80 + 10; // Random position 10% to 90%
+        const duration = Math.random() * 2 + 1; // Speed
+        setShards(prev => [...prev, { id, left, duration }]);
+        setTimeout(() => setShards(prev => prev.filter(s => s.id !== id)), duration * 1000);
+      }, 600); // Spawn rate
+
+      // Logs
       const logOptions = [`Hash Verified`, `NPU Optimized`, `Packet Sent`, `Uplink Stable`];
       setInterval(() => {
         if (status === 'MINING') {
@@ -128,9 +162,33 @@ function App() {
     }
   };
 
+  // 4. INVITE FUNCTION
+  const handleInvite = () => {
+    if (!user) return;
+    // ⚠️ REPLACE 'YOUR_BOT_USERNAME_HERE' WITH YOUR ACTUAL BOT USERNAME (No @)
+    const botUsername = 'The_RIM_Bot'; 
+    const inviteLink = `https://t.me/${The_RIM_Bot}/start?startapp=ref_${user.id}`;
+    const text = `Join the RIM Intelligence Swarm. Activate your node.`;
+    const url = `https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };
+
   return (
-    <div className="flex flex-col min-h-screen bg-black text-white font-mono overflow-hidden select-none">
+    <div className="flex flex-col min-h-screen bg-black text-white font-mono overflow-hidden select-none relative">
       
+      {/* CSS FOR ANIMATIONS */}
+      <style>{`
+        @keyframes ripple {
+          0% { transform: scale(1); opacity: 0.8; border-width: 1px; }
+          100% { transform: scale(3); opacity: 0; border-width: 0px; }
+        }
+        @keyframes floatUp {
+          0% { bottom: -10px; opacity: 0; transform: scale(0.5); }
+          20% { opacity: 1; }
+          100% { bottom: 60%; opacity: 0; transform: scale(1.2); }
+        }
+      `}</style>
+
       {/* HEADER */}
       <div className="p-5 border-b border-gray-900 bg-black/80 backdrop-blur-xl z-50">
         <div className="flex justify-between items-center">
@@ -153,8 +211,22 @@ function App() {
       </div>
 
       {/* CORE VIEW */}
-      <div className="flex-1 relative flex flex-col items-center justify-center p-6">
+      <div className="flex-1 relative flex flex-col items-center justify-center p-6 z-10">
         
+        {/* SHARDS LAYER (Floating Up) */}
+        {shards.map(shard => (
+          <div
+            key={shard.id}
+            className="absolute w-1 h-4 rounded-full"
+            style={{
+              left: `${shard.left}%`,
+              backgroundColor: currentTier.color,
+              boxShadow: `0 0 10px ${currentTier.color}`,
+              animation: `floatUp ${shard.duration}s linear forwards`
+            }}
+          ></div>
+        ))}
+
         {currentTier.id === 7.3 && (
           <div className="absolute top-4 w-full px-12 z-20">
              <div className="flex justify-between text-[8px] font-bold tracking-widest mb-1">
@@ -169,32 +241,35 @@ function App() {
           </div>
         )}
 
+        {/* THE BAT-CORE */}
         <div onClick={toggleMining} className="relative w-72 h-72 flex items-center justify-center cursor-pointer">
           {status === 'MINING' && (
             <>
-              {/* Pulsing Rings (Replaces Hexagon) */}
-              <div className={`absolute inset-0 border rounded-full animate-ping ${isOverheated ? 'border-red-500/30' : 'border-white/10'}`}></div>
-              <div className={`absolute inset-12 border rounded-full animate-[ping_3s_linear_infinite] ${isOverheated ? 'border-red-500/20' : 'border-white/5'}`}></div>
+              {/* Pulse 3: Distant Ring */}
+              <div className={`absolute inset-0 border rounded-full animate-[ripple_3s_infinite_linear] ${isOverheated ? 'border-red-500/30' : 'border-white/10'}`}></div>
+              {/* Pulse 2: Thinking Wave */}
+              <div className={`absolute inset-12 border rounded-full animate-[ripple_2s_infinite_linear_0.5s] ${isOverheated ? 'border-red-500/20' : 'border-white/5'}`}></div>
             </>
           )}
 
-          {/* THE CHARACTER CORE (Centered) */}
+          {/* THE SILHOUETTE ICON */}
           <div className={`transition-all duration-700 flex items-center justify-center ${status === 'MINING' ? 'scale-110' : 'scale-100 opacity-40 grayscale'}`}>
              {currentTier.id >= 7.1 ? (
                <Eye size={140} strokeWidth={1.5} style={{ color: isOverheated ? '#EF4444' : currentTier.color, filter: isOverheated ? 'drop-shadow(0 0 20px red)' : `drop-shadow(0 0 40px ${currentTier.color})` }} className="animate-pulse" />
              ) : (
-               <div className="text-[100px] filter drop-shadow-2xl animate-pulse" style={{ color: currentTier.color }}>
+               <div className="text-[100px] filter drop-shadow-2xl animate-pulse" style={{ color: currentTier.color, textShadow: `0 0 30px ${currentTier.color}` }}>
                  {currentTier.icon}
                </div>
              )}
           </div>
           
           <div className="absolute -bottom-10 text-[10px] tracking-[0.5em] text-gray-600 animate-pulse">
-             {isOverheated ? 'OVERHEATED' : (status === 'MINING' ? `NODE ACTIVE` : 'INITIALIZE')}
+             {isOverheated ? 'OVERHEATED' : (status === 'MINING' ? `NODE ACTIVE` : 'TAP TO START')}
           </div>
         </div>
 
-        <div className="w-full max-w-xs mt-16 bg-gray-900/30 border border-gray-800 p-4 rounded backdrop-blur-sm">
+        {/* Stats Box */}
+        <div className="w-full max-w-xs mt-16 bg-gray-900/30 border border-gray-800 p-4 rounded backdrop-blur-sm z-20">
            <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <p className="text-[8px] text-gray-600 uppercase">Hashrate</p>
@@ -217,6 +292,21 @@ function App() {
            </div>
         </div>
       </div>
+
+      {/* SQUAD VIEW MODAL */}
+      {tab === 'SQUAD' && (
+        <div className="absolute inset-0 bg-black z-40 p-6 pt-20 overflow-y-auto">
+          <div className="flex justify-between items-center mb-6">
+             <h2 className="text-xl font-bold flex items-center"><Users className="mr-2" /> SQUAD</h2>
+             <button onClick={() => setTab('TERMINAL')} className="text-xs text-gray-500">CLOSE</button>
+          </div>
+          <div className="text-center mt-10">
+             <div className="w-20 h-20 bg-gray-900 rounded-full mx-auto flex items-center justify-center border border-gray-700 mb-4"><Users size={32} className="text-gray-400"/></div>
+             <p className="text-xs text-gray-500 mb-8 max-w-xs mx-auto">Expand the neural net. Earn 10% of all data mined by your downstream nodes.</p>
+             <button onClick={handleInvite} className="w-full py-4 bg-white text-black font-bold tracking-widest hover:bg-cyan-400 transition-colors">INITIATE RECRUITMENT</button>
+          </div>
+        </div>
+      )}
 
       {/* MINT MARKETPLACE */}
       {tab === 'MARKET' && (
@@ -254,7 +344,7 @@ function App() {
       )}
 
       {/* FOOTER */}
-      <div className="grid grid-cols-3 border-t border-gray-900 bg-black pb-8">
+      <div className="grid grid-cols-3 border-t border-gray-900 bg-black pb-8 z-50 bg-black">
         <button onClick={() => setTab('TERMINAL')} className={`p-4 flex flex-col items-center ${tab === 'TERMINAL' ? 'text-white' : 'text-gray-600'}`}>
           <Terminal size={18} /><span className="text-[8px] mt-1 font-bold">GRID</span>
         </button>
