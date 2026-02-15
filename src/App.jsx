@@ -1,13 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
-import { Terminal, Users, Zap, DollarSign, Eye, Hexagon } from 'lucide-react'
+import { Terminal, Users, Zap, DollarSign, Eye } from 'lucide-react'
 
-// --- ECONOMICS CONFIGURATION ---
+// --- CONFIGURATION ---
 const BASE_MINING_RATE = 0.1; 
 const HALVING_MULTIPLIER = 1.0; 
 const GOD_MODE_DAILY_LIMIT = 4 * 60 * 60; 
 
-// --- THE SEVEN SAGES HIERARCHY (FINAL NAMES) ---
+// NOTE: In the future, you will map specific images to specific tier IDs.
+// For this demo, we use the generated Scout Bat image for standard tiers.
+const TIER_IMAGE_URL = "https://lh3.googleusercontent.com/pw/AP1GczOkj4d-d3F8_Lp3_j6V6_s8l0q4f8C8q5t8b9g3v1a5s2d4f6g8h0j2k4l6n8p0q2w4e6r8t0y2u4i6o8p0a2s4d6f8g0h2j4k6l8=w600-h900-s-no-gm?authuser=0";
+
+// --- THE SEVEN SAGES HIERARCHY ---
 const TIERS = [
   { id: 1, name: 'SCOUT', threshold: 0, color: '#9CA3AF', multiplier: 1.0, icon: '🦇', supply: '∞', price: 'FREE', type: 'COMMON' },
   { id: 2, name: 'HIGH-FLYER', threshold: 1000, color: '#D1D5DB', multiplier: 1.2, icon: '🦇', supply: '∞', price: '$20', type: 'UNCOMMON' },
@@ -68,19 +72,15 @@ function App() {
       setUser(currentUser);
 
       if (currentUser) {
-        // Fetch User
         const { data } = await supabase.from('users').select('*').eq('id', currentUser.id).single();
-        
         if (data) {
           setBalance(data.balance);
           balanceRef.current = data.balance;
         } else {
-          // Create New User & Handle Referral
           let referrerId = null;
           if (startParam && startParam.startsWith('ref_')) {
              referrerId = parseInt(startParam.split('_')[1]);
           }
-          
           await supabase.from('users').insert({ 
             id: currentUser.id, 
             first_name: currentUser.first_name, 
@@ -117,12 +117,10 @@ function App() {
     } else {
       setStatus('MINING');
       
-      // Hardware Loop
       hardwareInterval.current = setInterval(() => {
         setNpuLoad(Math.floor(Math.random() * (99 - 80 + 1) + 80));
       }, 2000);
 
-      // Mining Loop
       miningInterval.current = setInterval(() => {
         const loadFactor = (Math.random() * 0.2) + 0.8; 
         
@@ -142,32 +140,33 @@ function App() {
         balanceRef.current = newBal;
       }, 100); 
 
-      // Visual Rain Loop (Shards)
+      // Visual Rain Loop (Shards) - Increased rate for better visual
       shardInterval.current = setInterval(() => {
         const id = Math.random();
-        const left = Math.random() * 80 + 10; // Random position 10% to 90%
-        const duration = Math.random() * 2 + 1; // Speed
-        setShards(prev => [...prev, { id, left, duration }]);
+        const left = Math.random() * 90 + 5; 
+        const duration = Math.random() * 1.5 + 0.5; 
+        // Use tier color for shards if not overheated
+        const color = isOverheated ? '#EF4444' : (currentTier.color === '#FFFFFF' ? '#06b6d4' : currentTier.color);
+        setShards(prev => [...prev, { id, left, duration, color }]);
         setTimeout(() => setShards(prev => prev.filter(s => s.id !== id)), duration * 1000);
-      }, 600); // Spawn rate
+      }, 300); 
 
-      // Logs
-      const logOptions = [`Hash Verified`, `NPU Optimized`, `Packet Sent`, `Uplink Stable`];
+      const logOptions = [`Hash Verified`, `NPU Optimized`, `Packet Sent`, `Uplink Stable`, `Neural Sync Complete`];
       setInterval(() => {
         if (status === 'MINING') {
           const l = logOptions[Math.floor(Math.random() * logOptions.length)];
           setLogs(prev => [l, ...prev].slice(0, 5));
         }
-      }, 1500); 
+      }, 1200); 
     }
   };
 
   // 4. INVITE FUNCTION
   const handleInvite = () => {
     if (!user) return;
-    // ⚠️ REPLACE 'YOUR_BOT_USERNAME_HERE' WITH YOUR ACTUAL BOT USERNAME (No @)
-    const botUsername = 'The_RIM_Bot'; 
-    const inviteLink = `https://t.me/${The_RIM_Bot}/start?startapp=ref_${user.id}`;
+    // ⚠️ REPLACE WITH YOUR ACTUAL BOT USERNAME
+    const botUsername = 'RIM_Protocol_Bot'; 
+    const inviteLink = `https://t.me/${botUsername}/start?startapp=ref_${user.id}`;
     const text = `Join the RIM Intelligence Swarm. Activate your node.`;
     const url = `https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');
@@ -179,13 +178,13 @@ function App() {
       {/* CSS FOR ANIMATIONS */}
       <style>{`
         @keyframes ripple {
-          0% { transform: scale(1); opacity: 0.8; border-width: 1px; }
-          100% { transform: scale(3); opacity: 0; border-width: 0px; }
+          0% { transform: scale(0.8); opacity: 0.6; border-width: 2px; }
+          100% { transform: scale(2.5); opacity: 0; border-width: 0px; }
         }
         @keyframes floatUp {
-          0% { bottom: -10px; opacity: 0; transform: scale(0.5); }
-          20% { opacity: 1; }
-          100% { bottom: 60%; opacity: 0; transform: scale(1.2); }
+          0% { bottom: -10px; opacity: 0; }
+          10% { opacity: 1; }
+          100% { bottom: 70%; opacity: 0; }
         }
       `}</style>
 
@@ -217,16 +216,17 @@ function App() {
         {shards.map(shard => (
           <div
             key={shard.id}
-            className="absolute w-1 h-4 rounded-full"
+            className="absolute w-[2px] h-[6px] rounded-full z-0"
             style={{
               left: `${shard.left}%`,
-              backgroundColor: currentTier.color,
-              boxShadow: `0 0 10px ${currentTier.color}`,
+              backgroundColor: shard.color,
+              boxShadow: `0 0 8px ${shard.color}`,
               animation: `floatUp ${shard.duration}s linear forwards`
             }}
           ></div>
         ))}
 
+        {/* GOD MODE OVERHEAT BAR */}
         {currentTier.id === 7.3 && (
           <div className="absolute top-4 w-full px-12 z-20">
              <div className="flex justify-between text-[8px] font-bold tracking-widest mb-1">
@@ -242,34 +242,39 @@ function App() {
         )}
 
         {/* THE BAT-CORE */}
-        <div onClick={toggleMining} className="relative w-72 h-72 flex items-center justify-center cursor-pointer">
-          {status === 'MINING' && (
-            <>
-              {/* Pulse 3: Distant Ring */}
-              <div className={`absolute inset-0 border rounded-full animate-[ripple_3s_infinite_linear] ${isOverheated ? 'border-red-500/30' : 'border-white/10'}`}></div>
-              {/* Pulse 2: Thinking Wave */}
-              <div className={`absolute inset-12 border rounded-full animate-[ripple_2s_infinite_linear_0.5s] ${isOverheated ? 'border-red-500/20' : 'border-white/5'}`}></div>
-            </>
-          )}
-
-          {/* THE SILHOUETTE ICON */}
-          <div className={`transition-all duration-700 flex items-center justify-center ${status === 'MINING' ? 'scale-110' : 'scale-100 opacity-40 grayscale'}`}>
+        <div onClick={toggleMining} className="relative w-80 h-96 flex items-center justify-center cursor-pointer group mt-6 z-10">
+          
+          {/* 1. IMAGE BACKGROUND (The Core Visual) */}
+          <div className={`absolute inset-0 flex items-center justify-center transition-all duration-700 ${status === 'MINING' ? 'scale-105 contrast-110' : 'scale-100 opacity-50 grayscale'}`}>
              {currentTier.id >= 7.1 ? (
-               <Eye size={140} strokeWidth={1.5} style={{ color: isOverheated ? '#EF4444' : currentTier.color, filter: isOverheated ? 'drop-shadow(0 0 20px red)' : `drop-shadow(0 0 40px ${currentTier.color})` }} className="animate-pulse" />
+               // Placeholder Eye for Apex Tiers (You will replace this with Apex Images later)
+               <Eye size={180} strokeWidth={1} style={{ color: isOverheated ? '#EF4444' : currentTier.color, filter: isOverheated ? 'drop-shadow(0 0 20px red)' : `drop-shadow(0 0 50px ${currentTier.color})` }} className="animate-pulse" />
              ) : (
-               <div className="text-[100px] filter drop-shadow-2xl animate-pulse" style={{ color: currentTier.color, textShadow: `0 0 30px ${currentTier.color}` }}>
-                 {currentTier.icon}
-               </div>
+               // THE HIGH-FIDELITY SCOUT BAT IMAGE
+               <img 
+                 src={TIER_IMAGE_URL} 
+                 alt="Neural Core" 
+                 className="w-full h-full object-contain drop-shadow-[0_0_30px_rgba(6,182,212,0.3)]"
+               />
              )}
           </div>
+
+          {/* 2. PULSING RINGS OVERLAY (Z-10) */}
+          {status === 'MINING' && currentTier.id < 7.1 && (
+            <>
+              <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border-2 rounded-full animate-[ripple_3s_infinite_linear] z-10 ${isOverheated ? 'border-red-500/50' : 'border-cyan-500/30'}`}></div>
+              <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 border-2 rounded-full animate-[ripple_2s_infinite_linear_0.5s] z-10 ${isOverheated ? 'border-red-500/40' : 'border-cyan-400/20'}`}></div>
+            </>
+          )}
           
-          <div className="absolute -bottom-10 text-[10px] tracking-[0.5em] text-gray-600 animate-pulse">
-             {isOverheated ? 'OVERHEATED' : (status === 'MINING' ? `NODE ACTIVE` : 'TAP TO START')}
+          {/* 3. STATUS TEXT OVERLAY (Z-20) */}
+          <div className="absolute -bottom-10 text-[10px] tracking-[0.5em] text-cyan-500 font-bold animate-pulse z-20 whitespace-nowrap">
+             {isOverheated ? 'OVERHEATED' : (status === 'MINING' ? `NEURAL UPLINK ACTIVE` : 'TAP CORE TO INITIALIZE')}
           </div>
         </div>
 
         {/* Stats Box */}
-        <div className="w-full max-w-xs mt-16 bg-gray-900/30 border border-gray-800 p-4 rounded backdrop-blur-sm z-20">
+        <div className="w-full max-w-xs mt-12 bg-gray-900/30 border border-gray-800 p-4 rounded backdrop-blur-sm z-20 relative">
            <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <p className="text-[8px] text-gray-600 uppercase">Hashrate</p>
